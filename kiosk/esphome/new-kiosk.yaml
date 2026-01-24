@@ -1,0 +1,557 @@
+esphome:
+  name: new-kiosk
+  friendly_name: New Kiosk
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  password: ""
+
+ota:
+  - platform: esphome
+    password: ""
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Kiosk Fallback"
+    password: ""
+
+captive_portal:
+
+web_server:
+  port: 80
+
+# ============================================================
+# UART
+# ============================================================
+uart:
+  # CYD Display
+  - id: cyd_uart
+    tx_pin: GPIO23
+    rx_pin: GPIO21
+    baud_rate: 115200
+
+  # YX5300 audio module (FIXED: 25/33)
+  - id: yx_uart
+    tx_pin: GPIO25
+    rx_pin: GPIO33
+    baud_rate: 9600
+
+# ============================================================
+# GLOBALS
+# ============================================================
+globals:
+  # Lid actuator timeout (ms)
+  - id: actuator_travel_time
+    type: int
+    restore_value: true
+    initial_value: "40000"
+
+  # Timer system
+  - id: timer_seconds_remaining
+    type: int
+    restore_value: false
+    initial_value: "0"
+
+  - id: timer_running
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+  - id: last_time_published_ha
+    type: int
+    restore_value: false
+    initial_value: "-1"
+
+  - id: motion_track
+    type: int
+    restore_value: false
+    initial_value: "5"
+
+# ============================================================
+# NUMBERS
+# ============================================================
+number:
+  - platform: template
+    id: kiosk_timer_duration
+    name: "Kiosk Timer Duration (s)"
+    optimistic: true
+    min_value: 60
+    max_value: 900
+    step: 30
+    initial_value: 300
+
+  - platform: template
+    id: candy_cane_speed
+    name: "Candy Cane Speed"
+    optimistic: true
+    min_value: 0
+    max_value: 5
+    step: 0.25
+    initial_value: 3
+
+text_sensor:
+  - platform: template
+    name: "Kiosk Timer Remaining"
+    id: kiosk_timer_remaining
+    update_interval: 1s
+
+    lambda: |-
+      int t = id(timer_seconds_remaining);
+
+      // Only publish when timer is running or just hit zero
+      if (id(timer_running) || t == 0) {
+
+        // Avoid duplicate publishes
+        if (t != id(last_time_published_ha)) {
+
+          id(last_time_published_ha) = t;
+
+          int minutes = t / 60;
+          int seconds = t % 60;
+
+          char buf[8];
+          sprintf(buf, "%d:%02d", minutes, seconds);
+
+          return std::string(buf);
+        }
+      }
+
+      // No update needed
+      return {};
+
+button:
+  - platform: template
+    name: "Play Rain Warning"
+    id: btn_play_rain_warning
+    on_press:
+      - script.execute: play_rain_warning
+
+  - platform: template
+    name: "Play Rain Clear"
+    id: btn_play_rain_clear
+    on_press:
+      - script.execute: play_rain_clear
+
+  - platform: template
+    name: "Play Welcome Message"
+    id: btn_play_welcome
+    on_press:
+      - script.execute: play_welcome
+
+  - platform: template
+    name: "Play Thank You Message"
+    id: btn_play_thank_you
+    on_press:
+      - script.execute: play_thank_you
+
+  - platform: template
+    name: "Play Sequential Motion Message"
+    id: btn_play_sequential_motion
+    on_press:
+      - script.execute: play_sequential_motion
+
+# ============================================================
+# SENSORS
+# ============================================================
+sensor:
+  - platform: dht
+    pin: GPIO4
+    model: DHT22
+    temperature:
+      name: "Kiosk Temperature"
+    humidity:
+      name: "Kiosk Humidity"
+    update_interval: 60s
+
+  - platform: adc
+    pin: GPIO35
+    name: "Kiosk VIN Voltage"
+    attenuation: 12db
+    filters:
+      - multiply: 2.0
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 1
+
+  - platform: adc
+    pin: GPIO34
+    name: "Rain Analog 1"
+    attenuation: 12db
+
+  - platform: adc
+    pin: GPIO36
+    name: "Rain Analog 2"
+    attenuation: 12db
+
+# ============================================================
+# BINARY SENSORS
+# ============================================================
+binary_sensor:
+  - platform: gpio
+    pin: GPIO16
+    name: "PIR Motion"
+    device_class: motion
+
+  - platform: gpio
+    pin:
+      number: GPIO17
+      mode: INPUT_PULLUP
+      inverted: true
+    id: lid_closed
+    name: "Lid Closed"
+
+  - platform: gpio
+    pin:
+      number: GPIO22
+      mode: INPUT_PULLUP
+      inverted: true
+    id: lid_open
+    name: "Lid Open"
+
+  # Timer start button (starts big amp + timer)
+  - platform: gpio
+    pin:
+      number: GPIO5
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Timer Start Button"
+    on_press:
+      then:
+        - script.execute: kiosk_timer_start_script
+
+  # Welcome button (0003.mp3)
+  
+  - platform: gpio
+    id: kiosk_button
+    name: "Kiosk Button"
+    pin:
+      number: GPIO3
+      mode: INPUT_PULLUP
+      inverted: true
+    filters:
+      - delayed_on: 10ms
+      - delayed_off: 10ms
+    on_press:
+      then:
+        - script.execute: play_welcome
+
+  # Rain DO (HA uses this)
+  - platform: gpio
+    pin:
+      number: GPIO12
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Rain DO"
+    filters:
+      - delayed_on: 5s     # Prevent false trigger on boot or shutdown
+      - delayed_off: 300ms
+
+  - platform: status
+    name: "New Kiosk Online"
+    
+# ============================================================
+# LED STRIP
+# ============================================================
+light:
+  - platform: esp32_rmt_led_strip
+    id: display_lights
+    name: "Display Lights"
+    pin: GPIO13
+    num_leds: 158
+    rgb_order: GRB
+    chipset: ws2812
+    restore_mode: ALWAYS_OFF
+    
+
+    on_turn_on:
+      - light.control:
+          id: display_lights
+          effect: "Candy Cane"
+          brightness: 60%
+
+    effects:
+      - addressable_lambda:
+          name: "Candy Cane"
+          update_interval: 50ms
+          lambda: |-
+            static float offset = 0;
+            offset += id(candy_cane_speed).state * 0.5;
+            if (offset > 1000) offset = 0;
+            for (int i = 0; i < it.size(); i++) {
+              int stripe = (int)(i + offset) % 12;
+              it[i] = (stripe < 6)
+                ? Color(255, 0, 0)
+                : Color(255, 255, 255);
+            }
+
+      - addressable_lambda:
+          name: "Rain Flash Blue"
+          update_interval: 300ms
+          lambda: |-
+            static bool state = false;
+            state = !state;
+            for (int i = 0; i < it.size(); i++) {
+              it[i] = state ? Color(0, 0, 255) : Color(0, 0, 0);
+            }
+
+      - addressable_lambda:
+          name: "Christmas Twinkle"
+          update_interval: 50ms
+          lambda: |-
+            static float offset = 0;
+            offset += id(candy_cane_speed).state * 0.5;  // uses same speed slider
+            if (offset > 10000) offset = 0;
+
+            // Stripe width (LEDs per color band)
+            const int width = 12;
+
+            for (int i = 0; i < it.size(); i++) {
+              int pos = (i + (int)offset) % (width * 2);
+
+              if (pos < width) {
+                // RED band
+                it[i] = Color(255, 0, 0);
+              } else {
+                // GREEN band
+                it[i] = Color(0, 255, 0);
+              }
+            }
+
+
+
+# ============================================================
+# RELAYS
+# ============================================================
+switch:
+  - platform: gpio
+    id: relay_open
+    name: "Lid Open Relay"
+    pin: GPIO19
+    inverted: true
+
+  - platform: gpio
+    id: relay_close
+    name: "Lid Close Relay"
+    pin: GPIO18
+    inverted: true
+
+  - platform: gpio
+    id: relay_big_amp
+    name: "Big Amp Power"
+    pin: GPIO14
+    inverted: true
+
+  - platform: gpio
+    id: relay_fan
+    name: "Fan Power"
+    pin: GPIO27
+    inverted: true
+
+  - platform: gpio
+    id: relay_tablet
+    name: "Tablet Charger"
+    pin: GPIO26
+    inverted: true
+
+  - platform: gpio
+    id: relay_small_amp
+    name: "Small PA Amp"
+    pin: GPIO32
+    inverted: true
+
+  # ========================================================
+  # TIMER CONTROL SWITCHES (Show up in HA UI)
+  # ========================================================
+  - platform: template
+    name: "Kiosk Timer Start"
+    id: kiosk_timer_start_switch
+    turn_on_action:
+      - script.execute: kiosk_timer_start_script
+      - delay: 200ms
+      - switch.turn_off: kiosk_timer_start_switch
+
+  - platform: template
+    name: "Kiosk Timer Stop"
+    id: kiosk_timer_stop_switch
+    turn_on_action:
+      - script.execute: kiosk_timer_stop_script
+      - delay: 200ms
+      - switch.turn_off: kiosk_timer_stop_switch
+
+  - platform: template
+    name: "Kiosk Timer Reset"
+    id: kiosk_timer_reset_switch
+    turn_on_action:
+      - script.execute: kiosk_timer_start_script
+      - delay: 200ms
+      - switch.turn_off: kiosk_timer_reset_switch
+
+# ============================================================
+# YX5300 AUDIO COMMAND SCRIPTS
+# ============================================================
+script:
+
+  - id: play_rain_warning
+    then:
+      - uart.write:
+          id: yx_uart
+          data: [0x7E,0xFF,0x06,0x03,0x00,0x00,0x01,0xFE,0xF7,0xEF]
+
+  - id: play_rain_clear
+    then:
+      - uart.write:
+          id: yx_uart
+          data: [0x7E,0xFF,0x06,0x03,0x00,0x00,0x02,0xFE,0xF6,0xEF]
+
+  - id: play_welcome
+    then:
+      - uart.write:
+          id: yx_uart
+          data: [0x7E,0xFF,0x06,0x03,0x00,0x00,0x03,0xFE,0xF5,0xEF]
+
+  - id: play_thank_you
+    then:
+      - uart.write:
+          id: yx_uart
+          data: [0x7E,0xFF,0x06,0x03,0x00,0x00,0x04,0xFE,0xF4,0xEF]
+
+
+# ============================================================
+# TIMER SCRIPTS
+# ============================================================
+  - id: kiosk_timer_start_script
+    then:
+      - lambda: |-
+          int dur = (int)id(kiosk_timer_duration).state;
+          if (dur <= 0) dur = 300;
+          id(timer_seconds_remaining) = dur;
+          id(timer_running) = true;
+          char msg[32];
+          sprintf(msg, "START:%d\n", dur);
+          id(cyd_uart).write_str(msg);
+      - switch.turn_on: relay_big_amp
+
+  - id: kiosk_timer_stop_script
+    then:
+      - lambda: |-
+          id(timer_running) = false;
+          id(timer_seconds_remaining) = 0;
+          id(cyd_uart).write_str("STOP\n");
+      - switch.turn_off: relay_big_amp
+
+  # -------------------------
+  # MOVE OPEN
+  # -------------------------
+  - id: move_open
+    mode: restart
+    then:
+      - switch.turn_off: relay_close
+      - if:
+          condition:
+            binary_sensor.is_off: lid_open
+          then:
+            - switch.turn_on: relay_open
+
+  # -------------------------
+  # MOVE CLOSE
+  # -------------------------
+  - id: move_close
+    mode: restart
+    then:
+      - switch.turn_off: relay_open
+      - if:
+          condition:
+            binary_sensor.is_off: lid_closed
+          then:
+            - switch.turn_on: relay_close
+
+  # -------------------------
+  # STOP ACTUATOR
+  # -------------------------
+  - id: stop_actuator
+    mode: restart
+    then:
+      - switch.turn_off: relay_open
+      - switch.turn_off: relay_close
+
+  - id: play_sequential_motion
+    mode: restart
+    then:
+      - lambda: |-
+          int track = id(motion_track);
+
+          uint8_t cmd[10] = {
+            0x7E, 0xFF, 0x06, 0x03, 0x00, 0x00,
+            (uint8_t)track,
+            0x00, 0x00, 0xEF
+          };
+
+          int16_t checksum = 0 - (0xFF + 0x06 + 0x03 + 0x00 + 0x00 + track);
+          cmd[7] = (uint8_t)((checksum >> 8) & 0xFF);
+          cmd[8] = (uint8_t)(checksum & 0xFF);
+
+          id(yx_uart).write_array(cmd, sizeof(cmd));
+
+          ESP_LOGI("motion", "Sequential motion track: %d", track);
+
+          id(motion_track)++;
+          if (id(motion_track) > 9) {
+            id(motion_track) = 5;
+          }
+
+# ============================================================
+# TIMER TICK
+# ============================================================
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (id(timer_running) && id(timer_seconds_remaining) > 0) {
+            id(timer_seconds_remaining)--;
+            if (id(timer_seconds_remaining) <= 0) {
+              id(timer_running) = false;
+              id(timer_seconds_remaining) = 0;
+              id(cyd_uart).write_str("STOP\n");
+              id(relay_big_amp).turn_off();
+            }
+          }
+
+cover:
+  - platform: template
+    name: "Kiosk Lid"
+    id: kiosk_lid
+    device_class: garage
+
+    lambda: |-
+      if (id(relay_open).state) return COVER_OPERATION_OPENING;
+      if (id(relay_close).state) return COVER_OPERATION_CLOSING;
+      if (id(lid_open).state) return COVER_OPEN;
+      if (id(lid_closed).state) return COVER_CLOSED;
+      return COVER_OPERATION_IDLE;
+
+    open_action:
+      - script.execute: move_open
+      - wait_until:
+          condition:
+            binary_sensor.is_on: lid_open
+          timeout: !lambda "return id(actuator_travel_time);"
+      - script.execute: stop_actuator
+
+    close_action:
+      - script.execute: move_close
+      - wait_until:
+          condition:
+            binary_sensor.is_on: lid_closed
+          timeout: !lambda "return id(actuator_travel_time);"
+      - script.execute: stop_actuator
+
+    stop_action:
+      - script.execute: stop_actuator
