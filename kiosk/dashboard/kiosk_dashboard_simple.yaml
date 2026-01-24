@@ -1,0 +1,225 @@
+# Simplified Kiosk Dashboard (Core Features Only)
+# For full dashboard with xLights integration, see kiosk_dashboard_full.yaml
+
+title: Kiosk Control
+sections:
+  - type: grid
+    cards:
+      - type: heading
+        heading: ✅ 1. Kiosk Status Header (Live Health)
+        heading_style: title
+        
+      - type: horizontal-stack
+        cards:
+          - type: custom:mushroom-template-card
+            primary: ✅ Kiosk Online
+            secondary: >
+              {{ states('sensor.galaxy_tab_active3_battery_2') | float(0) |
+              round(1) }}% •  {{ states('sensor.new_kiosk_kiosk_temperature') |
+              float(0) | round(1) }}°F •  VIN {{
+              states('sensor.new_kiosk_kiosk_vin_voltage') | float(0) | round(1)
+              }}V
+            icon: mdi:tablet-dashboard
+            color: >
+              {% if is_state('binary_sensor.new_kiosk_new_kiosk_online','on') %}
+              green {% else %} red {% endif %}
+              
+      - type: heading
+        heading: 🎁 2. Kiosk Control Core
+        heading_style: title
+        
+      - type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_kiosk_timer_start
+            name: Start Timer
+            icon: mdi:timer-play
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_kiosk_timer_stop
+            name: Stop Timer
+            icon: mdi:timer-stop
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_kiosk_timer_reset
+            name: Reset Timer
+            icon: mdi:backup-restore
+            tap_action:
+              action: toggle
+              
+      - type: custom:mushroom-template-card
+        primary: Time Remaining
+        secondary: "{{ states('sensor.new_kiosk_kiosk_timer_remaining') }}"
+        icon: mdi:timer
+        icon_color: green
+        
+      - type: heading
+        heading: 🎄 3. LID CONTROL
+        heading_style: title
+        
+      - type: custom:mushroom-cover-card
+        entity: cover.new_kiosk_kiosk_lid
+        name: New Kiosk Lid
+        show_position_control: false
+        show_tilt_position_control: false
+        show_buttons_control: true
+        layout: horizontal
+        
+      - type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-entity-card
+            name: Rain Sensor
+            icon: mdi:weather-pouring
+            entity: binary_sensor.new_kiosk_rain_do
+          - type: custom:mushroom-entity-card
+            name: Rain Left
+            icon: mdi:flash-triangle
+            entity: sensor.new_kiosk_rain_analog_1
+          - type: custom:mushroom-entity-card
+            name: Rain Right
+            icon: mdi:weather-hail
+            entity: sensor.new_kiosk_rain_analog_2
+            
+      - type: heading
+        heading: 🎶 4. AUDIO + AMP POWER
+        heading_style: title
+        
+      - type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_big_amp_power
+            name: Big Amp
+            icon: mdi:speaker
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_small_pa_amp
+            name: Small PA
+            icon: mdi:bullhorn
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_fan_power
+            name: Cooling Fan
+            icon: mdi:fan
+            tap_action:
+              action: toggle
+              
+      - type: heading
+        heading: 🎅 5. CHRISTMAS DISPLAY LIGHTS
+        heading_style: title
+        
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-light-card
+            entity: light.new_kiosk_display_lights
+            name: Display Lights
+            show_brightness_control: true
+            show_color_control: true
+            show_effect_list: true
+          - type: custom:mushroom-number-card
+            entity: number.new_kiosk_candy_cane_speed
+            name: Candy Cane Speed
+            
+      - type: custom:mushroom-template-card
+        entity: sensor.kiosk_display_effect
+        primary: "{{ states('sensor.kiosk_display_effect') }}"
+        secondary: Current LED Effect
+        icon: mdi:led-strip-variant
+        
+      - type: heading
+        heading: 🎤 6. PRICKLY GUY VOICE BUTTONS
+        heading_style: title
+        
+      - type: grid
+        columns: 2
+        cards:
+          - type: custom:mushroom-template-card
+            primary: 🎄 Welcome
+            icon: mdi:account-voice
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_welcome_message
+          - type: custom:mushroom-template-card
+            primary: 🎁 Thank You
+            icon: mdi:hand-wave
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_thank_you_message
+          - type: custom:mushroom-template-card
+            primary: ⚠️ Rain Warning
+            icon: mdi:weather-rainy
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_rain_warning
+          - type: custom:mushroom-template-card
+            primary: ✅ Rain Clear
+            icon: mdi:weather-sunny
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_rain_clear
+          - type: custom:mushroom-template-card
+            primary: Motion Welcome
+            icon: mdi:motion-sensor
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_sequential_motion_message
+                
+      - type: heading
+        heading: 📱 7. TABLET CONTROL PANEL
+        heading_style: title
+        
+      - type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Restart Browser
+            icon: mdi:web-refresh
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_restart_browser_2
+          - type: custom:mushroom-template-card
+            primary: Reload Page
+            icon: mdi:reload
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_load_start_url_2
+          - type: custom:mushroom-template-card
+            primary: Reboot Tablet
+            icon: mdi:power-cycle
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_restart_device_2
+                
+      - type: heading
+        heading: ❄️ 8. ENVIRONMENT + RAIN STATUS
+        heading_style: title
+        
+      - type: glance
+        columns: 4
+        entities:
+          - sensor.new_kiosk_kiosk_temperature
+          - sensor.new_kiosk_kiosk_humidity
+          - binary_sensor.new_kiosk_rain_do
+          - binary_sensor.new_kiosk_pir_motion
