@@ -1,0 +1,25 @@
+# ESPHome
+.esphome/
+*.bin
+secrets.yaml
+
+# Home Assistant
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
