@@ -1,0 +1,323 @@
+###############################################################################
+# NEW KIOSK – FULL AUTOMATION PACKAGE (2025 CLEAN VERSION)
+###############################################################################
+input_boolean:
+  kiosk_motion_ready:
+    name: Kiosk Motion Ready
+    initial: true
+
+template:
+  - sensor:
+      - name: "Kiosk Display Effect"
+        unique_id: kiosk_display_effect
+        state: "{{ state_attr('light.new_kiosk_display_lights', 'effect') or 'None' }}"
+
+automation:
+  ###########################################################################
+  # 1) Rain Mode – Activate Immediately
+  ###########################################################################
+  - id: kiosk_rain_mode_activate
+    alias: "Kiosk: Rain Detected"
+    description: "Shutdown kiosk and play rain warning when rain is detected."
+
+    trigger:
+      - trigger: state
+        entity_id: binary_sensor.new_kiosk_rain_do
+        to: "on"
+
+    condition: []
+
+    action:
+      # Play rain warning MP3 (0001)
+      - action: button.press
+        target:
+          entity_id: button.new_kiosk_play_rain_warning
+
+      # Stop timer immediately (fires the ESPHome stop script)
+      - action: switch.turn_on
+        target:
+          entity_id: switch.new_kiosk_kiosk_timer_stop
+
+      # Turn OFF big amp (small PA amp stays ON)
+      - action: switch.turn_off
+        target:
+          entity_id: switch.new_kiosk_big_amp_power
+
+      # Set display lights to flashing blue rain effect
+      - action: light.turn_on
+        target:
+          entity_id: light.new_kiosk_display_lights
+        data:
+          effect: "Rain Flash Blue"
+          brightness_pct: 100
+
+      # Close kiosk lid
+      - action: cover.close_cover
+        target:
+          entity_id: cover.new_kiosk_kiosk_lid
+
+      # Turn OFF fans
+      - action: switch.turn_off
+        target:
+          entity_id: switch.new_kiosk_fan_power
+
+      # Tablet charger left ON on purpose (no action)
+
+      # One notification per rain event
+      - action: notify.mobile_app_prickly_guy
+        data:
+          title: "🌧 Rain Detected"
+          message: "Kiosk is shutting down, lid is closing, and big amp is off."
+      - delay: "00:00:20"
+      - action: light.turn_off
+        target:
+          entity_id: light.new_kiosk_display_lights
+    mode: single
+
+  ###########################################################################
+  # 2) Rain Mode – Clear (Rain OFF for 3 minutes, during show hours)
+  ###########################################################################
+  - id: kiosk_rain_mode_clear
+    alias: "Kiosk: Rain Cleared"
+    description: "Reopen kiosk and restore normal lighting after rain clears."
+
+    trigger:
+      - trigger: state
+        entity_id: binary_sensor.new_kiosk_rain_do
+        from: "on"
+        to: "off"
+        for: "00:03:00"
+
+    condition:
+      # Only reopen during show hours
+      - condition: time
+        after: "18:00:00"
+        before: "22:45:00"
+
+    action:
+      # Play rain clear MP3 (0002)
+      - action: button.press
+        target:
+          entity_id: button.new_kiosk_play_rain_clear
+
+      # Open kiosk lid
+      - action: cover.open_cover
+        target:
+          entity_id: cover.new_kiosk_kiosk_lid
+
+      # Turn fans back ON
+      - action: switch.turn_on
+        target:
+          entity_id: switch.new_kiosk_fan_power
+
+      # Restore candy cane effect on display lights
+      - action: light.turn_on
+        target:
+          entity_id: light.new_kiosk_display_lights
+        data:
+          effect: "Candy Cane"
+          brightness_pct: 60
+
+      # Small PA amp + tablet charger intentionally left ON
+
+      # One notification for rain clear
+      - action: notify.mobile_app_prickly_guy
+        data:
+          title: "🌤 Rain Cleared"
+          message: "Kiosk lid reopened, fans back on, and lights restored."
+
+    mode: single
+
+  ###########################################################################
+  # 3) Daily Power Up (start of show)
+  ###########################################################################
+  - id: kiosk_daily_power_up
+    alias: "Kiosk: Daily Power Up"
+    description: "Power kiosk on at start of show."
+
+    trigger:
+      - trigger: time
+        at: "18:00:00"
+
+    condition: []
+
+    action:
+      # Turn on fans, tablet charger, and small PA amp
+      - action: switch.turn_on
+        target:
+          entity_id:
+            - switch.new_kiosk_fan_power
+            - switch.new_kiosk_tablet_charger
+            - switch.new_kiosk_small_pa_amp
+
+      # If it is NOT raining, open the lid
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: binary_sensor.new_kiosk_rain_do
+                state: "off"
+            sequence:
+              - action: cover.open_cover
+                target:
+                  entity_id: cover.new_kiosk_kiosk_lid
+
+      # Turn on display lights in Candy Cane effect
+      - action: light.turn_on
+        target:
+          entity_id: light.new_kiosk_display_lights
+        data:
+          effect: "Candy Cane"
+          brightness_pct: 60
+
+      # Notification
+      - action: notify.mobile_app_prickly_guy
+        data:
+          title: "🎄 Kiosk Online"
+          message: "Kiosk powered up for the show. Lid will stay closed if raining."
+
+    mode: single
+
+  ###########################################################################
+  # 4) Daily Power Down (end of show)
+  ###########################################################################
+  - id: kiosk_daily_power_down
+    alias: "Kiosk: Daily Power Down"
+    description: "Close kiosk and power down at end of show."
+
+    trigger:
+      - trigger: time
+        at: "22:45:00"
+
+    condition: []
+
+    action:
+      # Make sure timer is stopped
+      - action: switch.turn_on
+        target:
+          entity_id: switch.new_kiosk_kiosk_timer_stop
+
+      # Turn OFF big amp (immediately)
+      - action: switch.turn_off
+        target:
+          entity_id: switch.new_kiosk_big_amp_power
+
+      # Play thank-you MP3 (0004)
+      - action: button.press
+        target:
+          entity_id: button.new_kiosk_play_thank_you_message
+
+      # Wait a few seconds for audio to play
+      - delay: "00:00:16"
+
+      # Close kiosk lid
+      - action: cover.close_cover
+        target:
+          entity_id: cover.new_kiosk_kiosk_lid
+
+      # Turn OFF fans and small PA amp
+      - action: switch.turn_off
+        target:
+          entity_id:
+            - switch.new_kiosk_fan_power
+            - switch.new_kiosk_small_pa_amp
+
+      # Turn OFF display lights
+      - action: light.turn_off
+        target:
+          entity_id: light.new_kiosk_display_lights
+
+      # Tablet charger intentionally left ON
+      - action: notify.mobile_app_prickly_guy
+        data:
+          title: "🛑 Kiosk Offline"
+          message: "Kiosk closed and powered down for the night (tablet still charging)."
+
+    mode: single
+
+  ###########################################################################
+  # 5) Random Motion Scripts
+  ###########################################################################
+
+  - alias: kiosk_random_motion_voice
+    id: kiosk_random_motion_voice
+    description: "Play a random kiosk voice line when motion is detected and kiosk is idle"
+
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.new_kiosk_pir_motion
+        from: "off"
+        to: "on"
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.new_kiosk_lid_open
+        state: "on"
+      - condition: state
+        entity_id: switch.new_kiosk_big_amp_power
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.kiosk_motion_ready
+        state: "on"
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.kiosk_motion_ready
+      - action: light.turn_on
+        target:
+          entity_id: light.new_kiosk_display_lights
+        data:
+          effect: Christmas Twinkle
+      - action: button.press
+        target:
+          entity_id: button.new_kiosk_play_sequential_motion_message
+      - delay: "00:00:10"
+      - action: light.turn_on
+        target:
+          entity_id: light.new_kiosk_display_lights
+        data:
+          effect: Candy Cane
+      - delay: "00:03:00"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.kiosk_motion_ready
+    mode: single
+    max_exceeded: silent
+
+  ###########################################################################
+  # 6) Reset Boolean on power disconnect
+  ###########################################################################
+
+  - alias: kiosk_reset_motion_ready_on_boot
+    id: kiosk_reset_motion_ready_on_boot
+    description: "Resets motion cooldown helper when kiosk ESP boots"
+
+    trigger:
+      - trigger: state
+        entity_id: binary_sensor.new_kiosk_new_kiosk_online
+        from: "off"
+        to: "on"
+
+    action:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.kiosk_motion_ready
+
+  ###########################################################################
+  # 7) Verify Displays are off when kiosk is closed
+  ###########################################################################
+
+  - alias: display_lights_shutdown
+    id: display_lights_shutdown
+    description: "Make sure the displays are shut off when kiosk is closed"
+
+    trigger:
+      - trigger: state
+        entity_id: binary_sensor.new_kiosk_lid_closed
+        from: "off"
+        to: "on"
+    action:
+      - action: light.turn_off
+        target:
+          entity_id: light.new_kiosk_display_lights
+      - action: switch.turn_off
+        target:
+          entity_id: switch.new_kiosk_screen
