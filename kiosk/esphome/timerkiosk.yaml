@@ -1,0 +1,235 @@
+esphome:
+  name: timerkiosk
+  friendly_name: CYD Timer
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+api:
+  password: ""
+
+ota:
+  - platform: esphome
+    password: ""
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Timerkiosk Fallback Hotspot"
+    password: ""
+
+captive_portal:
+
+logger:
+  baud_rate: 0   # frees UART0 for display & comms
+
+web_server:
+  port: 80
+
+# ----------------------
+# UART LINK TO KIOSK (NEW PROTOCOL)
+# ----------------------
+uart:
+  id: cyd_uart
+  tx_pin: GPIO27
+  rx_pin: GPIO22
+  baud_rate: 115200
+
+# ----------------------
+# INTERNAL STATE
+# ----------------------
+globals:
+  - id: cyd_timer_remaining
+    type: int
+    initial_value: "0"
+
+  - id: uart_rx_buffer
+    type: std::string
+    initial_value: ""
+
+# ----------------------
+# UART PARSER (NEW)
+# ----------------------
+text_sensor:
+  - platform: template
+    id: uart_rx
+    internal: true
+    update_interval: 20ms
+    lambda: |-
+      uint8_t c;
+      while (id(cyd_uart).available()) {
+        if (id(cyd_uart).read_byte(&c)) {
+
+          if (c == '\n') {
+            std::string msg = id(uart_rx_buffer);
+            id(uart_rx_buffer).clear();
+            ESP_LOGI("uart", "RX: %s", msg.c_str());
+
+            // START:xxx
+            if (msg.rfind("START:", 0) == 0) {
+              int v = atoi(msg.substr(6).c_str());
+              id(cyd_timer_remaining) = v;
+            }
+
+            // RESET:xxx
+            else if (msg.rfind("RESET:", 0) == 0) {
+              int v = atoi(msg.substr(6).c_str());
+              id(cyd_timer_remaining) = v;
+            }
+
+            // STOP
+            else if (msg == "STOP") {
+              id(cyd_timer_remaining) = 0;
+            }
+
+            id(cyd_display).update();
+            return {};
+          }
+
+          id(uart_rx_buffer).push_back((char)c);
+        }
+      }
+      return {};
+
+# ----------------------
+# FONTS
+# ----------------------
+font:
+  - file: "fonts/Roboto-Regular.ttf"
+    id: font_timer
+    size: 96
+
+  - file: "fonts/Roboto-Regular.ttf"
+    id: font_label
+    size: 22
+
+# ----------------------
+# COLORS
+# ----------------------
+color:
+  - id: black
+    hex: "000000"
+  - id: white
+    hex: "FFFFFF"
+  - id: timer_green
+    hex: "00FF00"
+  - id: timer_red
+    hex: "FF0000"
+
+# ----------------------
+# BACKLIGHT
+# ----------------------
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    id: backlight
+    output: backlight_pwm
+    restore_mode: ALWAYS_ON
+
+# ----------------------
+# TFT DISPLAY
+# ----------------------
+# ----------------------
+# TFT DISPLAY + TOUCH (FIXED SPI BLOCK)
+# ----------------------
+spi:
+  - id: tft_spi
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+
+  - id: touch_spi
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+display:
+  - platform: mipi_spi
+    id: cyd_display
+    spi_id: tft_spi
+    model: ILI9341
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    rotation: 0
+    color_order: rgb
+    color_depth: 16
+    dimensions:
+      width: 320
+      height: 240
+    update_interval: 1s
+
+    lambda: |-
+      // ----- FAST PARTIAL CLEAR -----
+      it.filled_rectangle(0, 50, 320, 140, id(black));
+
+      int t = id(cyd_timer_remaining);
+
+      // ----- IDLE -----
+      if (t <= 0) {
+        it.printf(160, 120, id(font_timer), id(white), TextAlign::CENTER, "IDLE");
+        return;
+      }
+
+      // ----- TIMER -----
+      Color timer_color = (t <= 60 ? id(timer_red) : id(timer_green));
+
+      int m = t / 60;
+      int s = t % 60;
+      char buff[8];
+      sprintf(buff, "%d:%02d", m, s);
+
+      it.printf(160, 120, id(font_timer), timer_color, TextAlign::CENTER, "%s", buff);
+
+touchscreen:
+  - platform: xpt2046
+    id: cyd_touch
+    spi_id: touch_spi
+    cs_pin: GPIO33
+    interrupt_pin: GPIO36
+    update_interval: 10ms
+    threshold: 80
+
+    calibration:
+      x_min: 370
+      x_max: 3591
+      y_min: 520
+      y_max: 3776
+
+    transform:
+      swap_xy: true
+      mirror_x: true
+      mirror_y: true
+
+
+binary_sensor:
+  - platform: touchscreen
+    touchscreen_id: cyd_touch
+    name: "Screen Touch"
+    x_min: 20
+    x_max: 300
+    y_min: 20
+    y_max: 220
+
+    on_press:
+      then:
+        - lambda: |-
+            id(cyd_uart).write_str("CMD_START\n");
+            id(backlight).turn_on();
+
+# ----------------------
+# 1-SECOND COUNTDOWN
+# ----------------------
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (id(cyd_timer_remaining) > 0) {
+            id(cyd_timer_remaining)--;
+          }
