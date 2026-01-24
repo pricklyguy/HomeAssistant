@@ -1,0 +1,1035 @@
+title: Home
+sections:
+  - type: grid
+    cards:
+      - type: heading
+        heading: ✅ 1. Kiosk Status Header (Live Health)
+        heading_style: title
+      - type: horizontal-stack
+        cards:
+          - type: custom:mushroom-template-card
+            primary: ✅ Kiosk Online
+            secondary: >
+              {{ states('sensor.galaxy_tab_active3_battery_2') | float(0) |
+              round(1) }}% •  {{ states('sensor.new_kiosk_kiosk_temperature') |
+              float(0) | round(1) }}°F •  VIN {{
+              states('sensor.new_kiosk_kiosk_vin_voltage') | float(0) | round(1)
+              }}V
+            icon: mdi:tablet-dashboard
+            color: >
+              {% if is_state('binary_sensor.new_kiosk_new_kiosk_online','on') %}
+              green {% else %} red {% endif %}
+            features_position: bottom
+      - type: heading
+        heading: 🎁 2. Kiosk Control Core
+        heading_style: title
+      - type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_kiosk_timer_start
+            name: Start Timer
+            icon: mdi:timer-play
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_kiosk_timer_stop
+            name: Stop Timer
+            icon: mdi:timer-stop
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_kiosk_timer_reset
+            name: Reset Timer
+            icon: mdi:backup-restore
+            tap_action:
+              action: toggle
+        grid_options:
+          columns: 12
+          rows: 1
+      - type: custom:mushroom-template-card
+        primary: Time Remaining
+        secondary: "{{ states('sensor.new_kiosk_kiosk_timer_remaining') }}"
+        icon: mdi:timer
+        icon_color: green
+        progress: >
+          {% set t = states('sensor.new_kiosk_kiosk_timer_remaining') %} {% if
+          ':' in t %}
+            {% set m, s = t.split(':') %}
+            {% set remaining = (m|int * 60) + (s|int) %}
+            {% set total = states('number.new_kiosk_kiosk_timer_duration_s') | int %}
+            {{ (remaining / total * 100) | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+        layout: default
+        multiline_secondary: false
+      - type: heading
+        icon: mdi:fridge
+        heading: 🎄 3. LID CONTROL (Big & Dramatic)
+        heading_style: title
+      - type: custom:mushroom-cover-card
+        entity: cover.new_kiosk_kiosk_lid
+        name: New Kiosk Lid
+        show_position_control: false
+        show_tilt_position_control: false
+        show_buttons_control: true
+        layout: horizontal
+        fill_container: false
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('cover.new_kiosk_kiosk_lid', 'open') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-entity-card
+            name: Rain Sensor
+            icon: mdi:weather-pouring
+            tap_action:
+              action: toggle
+            entity: binary_sensor.new_kiosk_rain_do
+          - type: custom:mushroom-entity-card
+            name: "Rain Left "
+            icon: mdi:flash-triangle
+            tap_action:
+              action: toggle
+            entity: sensor.new_kiosk_rain_analog_1
+          - type: custom:mushroom-entity-card
+            name: Rain Right
+            icon: mdi:weather-hail
+            tap_action:
+              action: toggle
+            entity: sensor.new_kiosk_rain_analog_2
+        grid_options:
+          columns: 12
+          rows: 1
+      - type: heading
+        icon: mdi:fridge
+        heading: 🎶 4. AUDIO + AMP POWER
+        heading_style: title
+      - type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_big_amp_power
+            name: Big Amp
+            icon: mdi:speaker
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_small_pa_amp
+            name: Small PA
+            icon: mdi:bullhorn
+            tap_action:
+              action: toggle
+          - type: custom:mushroom-entity-card
+            entity: switch.new_kiosk_fan_power
+            name: Cooling Fan
+            icon: mdi:fan
+            tap_action:
+              action: toggle
+        grid_options:
+          columns: 12
+          rows: 1
+      - type: heading
+        icon: mdi:fridge
+        heading: 🎅 5. CHRISTMAS DISPLAY LIGHTS
+        heading_style: title
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-light-card
+            entity: light.new_kiosk_display_lights
+            name: Display Lights
+            show_brightness_control: true
+            show_color_control: true
+            show_effect_list: true
+          - type: custom:mushroom-number-card
+            entity: number.new_kiosk_candy_cane_speed
+            name: Candy Cane Speed
+      - type: custom:mushroom-template-card
+        entity: sensor.kiosk_display_effect
+        primary: |
+          {{ states('sensor.kiosk_display_effect') }}
+        secondary: Current LED Effect
+        icon: mdi:led-strip-variant
+        grid_options:
+          columns: full
+        features_position: bottom
+        card_mod:
+          style: |
+            {% set effect = states('sensor.kiosk_display_effect') %}
+            /* === 1. MAIN CARD (The Animation Layer) === */
+            ha-card {
+              position: relative;
+              padding: 12px !important; 
+              overflow: hidden;
+              transition: all 0.5s ease;
+              border: none;
+              background: #111; 
+              --primary-text-color: #ffffff !important;
+              --secondary-text-color: #ffffff !important;
+            }
+
+            /* === 2. THE BLACK MASK (The Inner Card) === */
+            ha-card::before {
+              content: "";
+              position: absolute;
+              top: 6px;
+              bottom: 6px;
+              left: 6px;
+              right: 6px;
+              background: #111111;
+              border-radius: 12px;
+              z-index: 1;
+            }
+
+            /* === 3. CONTENT LAYERING === */
+            /* Container needs to be above the mask */
+            ha-card > div {
+              position: relative;
+              z-index: 10 !important;
+              transform: translateY(-10px) !important;
+            }
+
+            mushroom-state-item {
+              position: relative;
+              z-index: 10 !important;
+            }
+
+            mushroom-state-info {
+              position: relative;
+              z-index: 10 !important;
+            }
+
+            /* Force white text */
+            mushroom-state-info .primary,
+            mushroom-state-info .secondary {
+              color: #ffffff !important;
+            }
+
+            /* Icon styling */
+            mushroom-shape-icon {
+              position: relative;
+              z-index: 10 !important;
+              --icon-color: white !important;
+              --shape-color: rgba(255,255,255,0.15) !important;
+            }
+
+            /* === 4. PRICKLY GUY === */
+            ha-card::after {
+              content: "";
+              position: absolute;
+              bottom: -4px;
+              right: -4px;
+              width: 65px;
+              height: 65px;
+              background-image: url("/local/prickly_guy_small.png");
+              background-size: contain;
+              background-repeat: no-repeat;
+              z-index: 11;
+              transform: rotate(-10deg);
+              pointer-events: none;
+              filter: drop-shadow(-2px -2px 4px rgba(0,0,0,0.8));
+            }
+
+            /* ====================================================== */
+            /* 🎅 ANIMATIONS */
+            /* ====================================================== */
+            {% if effect == 'Candy Cane' %}
+            @keyframes candy_scroll {
+              0% { background-position: 0 0; }
+              100% { background-position: 565.6px 565.6px; }
+            }
+            ha-card {
+              background: repeating-linear-gradient(
+                45deg,
+                #ff0000,
+                #ff0000 10px,
+                #ffffff 10px,
+                #ffffff 20px
+              );
+              animation: candy_scroll 6s linear infinite;
+              box-shadow: 0 0 15px rgba(255, 0, 0, 0.6); 
+            }
+            {% endif %}
+
+            {% if effect == 'Christmas Twinkle' %}
+            @keyframes xmas_scroll {
+              0% { background-position: 0 0; }
+              100% { background-position: -565.6px 565.6px; }
+            }
+            ha-card {
+              background: repeating-linear-gradient(
+                45deg,
+                #ff0000,
+                #ff0000 10px,
+                #00ff00 10px,
+                #00ff00 20px
+              );
+              animation: xmas_scroll 6s linear infinite;
+              box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+            }
+            {% endif %}
+
+            {% if effect == 'Rain Flash Blue' %}
+            @keyframes rain_pulse {
+              0% { box-shadow: 0 0 10px rgba(0,128,255,0.5); }
+              50% { box-shadow: 0 0 20px rgba(0,128,255,1); }
+              100% { box-shadow: 0 0 10px rgba(0,128,255,0.5); }
+            }
+            ha-card {
+              background: linear-gradient(135deg, #0044ff, #00ccff);
+              animation: rain_pulse 2s infinite;
+            }
+            {% endif %}
+
+            {% if effect == "None" or effect == "" %}
+            ha-card {
+              background: linear-gradient(135deg, #111111, #111111);
+              box-shadow: none;
+            }
+            {% endif %}
+  - type: grid
+    cards:
+      - type: heading
+        icon: mdi:fridge
+        heading: 🎤 6. PRICKLY GUY VOICE BUTTONS
+        heading_style: title
+      - square: false
+        type: grid
+        columns: 2
+        cards:
+          - type: custom:mushroom-template-card
+            primary: 🎄 Welcome
+            icon: mdi:account-voice
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_welcome_message
+            features_position: bottom
+          - type: custom:mushroom-template-card
+            primary: 🎁 Thank You
+            icon: mdi:hand-wave
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_thank_you_message
+          - type: custom:mushroom-template-card
+            primary: ⚠️ Rain Warning
+            icon: mdi:weather-rainy
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_rain_warning
+            features_position: bottom
+          - type: custom:mushroom-template-card
+            primary: ✅ Rain Clear
+            icon: mdi:weather-sunny
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_rain_clear
+            features_position: bottom
+          - type: custom:mushroom-template-card
+            primary: Motion Welcome
+            icon: mdi:motion-sensor
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.new_kiosk_play_sequential_motion_message
+            features_position: bottom
+      - type: heading
+        icon: mdi:fridge
+        heading: 📱 7. TABLET CONTROL PANEL
+        heading_style: title
+      - square: false
+        type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Restart Browser
+            icon: mdi:web-refresh
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_restart_browser_2
+            features_position: bottom
+          - type: custom:mushroom-template-card
+            primary: Reload Page
+            icon: mdi:reload
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_load_start_url_2
+          - type: custom:mushroom-template-card
+            primary: Reboot Tablet
+            icon: mdi:power-cycle
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_restart_device_2
+      - square: false
+        type: grid
+        columns: 3
+        cards:
+          - type: custom:mushroom-template-card
+            primary: "  Tablet Battery"
+            icon: mdi:battery
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_restart_browser_2
+            features_position: bottom
+            entity: sensor.galaxy_tab_active3_battery_2
+            features:
+              - type: bar-gauge
+          - type: custom:mushroom-template-card
+            primary: Tablet Screen
+            icon: mdi:screen-rotation
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_load_start_url_2
+            features_position: bottom
+            entity: switch.new_kiosk_screen
+          - type: custom:mushroom-template-card
+            primary: Screen Brightness
+            icon: mdi:brightness-auto
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.galaxy_tab_active3_restart_device_2
+            features_position: bottom
+            entity: number.galaxy_tab_active3_screen_brightness_2
+      - type: heading
+        icon: mdi:fridge
+        heading: 🎥 8. LIVE KIOSK CAMERA
+        heading_style: title
+      - type: picture-entity
+        entity: camera.new_kiosk
+        name: 🎥 Kiosk Cam
+      - type: heading
+        icon: mdi:fridge
+        heading: ❄️ 9. ENVIRONMENT + RAIN STATUS
+        heading_style: title
+      - type: glance
+        columns: 4
+        entities:
+          - sensor.new_kiosk_kiosk_temperature
+          - sensor.new_kiosk_kiosk_humidity
+          - binary_sensor.new_kiosk_rain_do
+          - binary_sensor.new_kiosk_pir_motion
+  - type: grid
+    cards:
+      - show_name: true
+        show_icon: true
+        type: button
+        entity: switch.xlights_group
+        icon: mdi:string-lights
+        grid_options:
+          columns: full
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.xlights_group', 'on') %}
+                border: 2px solid #FFC107 !important; /* Amber Border */
+                box-shadow: 0 0 6px #FFC107; /* Amber Glow */
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - type: custom:mushroom-entity-card
+        entity: switch.xlights_group
+        tap_action:
+          action: toggle
+        icon: mdi:power-plug
+        icon_color: blue
+        name: xLights Group
+        card_mod:
+          style:
+            mushroom-shape-icon$: |
+              .shape {
+                {# ========== USER CONFIG ========== #}
+                {# true = number mode, false = state mode #}
+                {% set use_number      = false %}
+
+                {# STATE MODE SETTINGS #}
+                {% set state_entity    = 'switch.xlights_group' %}
+                {% set active_value    = 'on' %}
+
+                {# OPTIONAL: NUMBER MODE SETTINGS #}
+                {% set number_entity   = 'sensor.plug_power' %}
+                
+                {# '>' '<' '=' '>=' '<=' #}
+                {% set number_operator = '>' %}
+                
+                {% set threshold       = 0.0 %}
+                {# ========== END USER CONFIG ====== #}
+
+                {# ======== TRIGGER DECISION LOGIC ======== #}
+                {% if use_number %}
+                  {% set num = states(number_entity) | float(0) %}
+                  
+                  {# Evaluate numeric rule #}
+                  {% if number_operator == '>' %}
+                    {% set trigger_active = (num > threshold) %}
+                  {% elif number_operator == '<' %}
+                    {% set trigger_active = (num < threshold) %}
+                  {% elif number_operator == '=' %}
+                    {% set trigger_active = (num == threshold) %}
+                  {% elif number_operator == '>=' %}
+                    {% set trigger_active = (num >= threshold) %}
+                  {% elif number_operator == '<=' %}
+                    {% set trigger_active = (num <= threshold) %}
+                  {% else %}
+                    {% set trigger_active = false %}
+                  {% endif %}
+
+                {% else %}
+                  {# State mode #}
+                  {% if states(state_entity) == active_value %}
+                    {% set trigger_active = true %}
+                  {% else %}
+                    {% set trigger_active = false %}
+                  {% endif %}
+                {% endif %}
+                {# =========== END TRIGGER LOGIC =========== #}
+
+                {% if trigger_active %}
+                  --shape-animation: ring-breathe 1.8s ease-out infinite;
+                  opacity: 1;
+                {% else %}
+                  --shape-animation: none;
+                  opacity: 0.7;
+                {% endif %}
+              }
+
+              @keyframes ring-breathe {
+                0%   { box-shadow: 0 0 0 0 rgba(var(--rgb-{{ config.icon_color }}), 0.9); }
+                70%  { box-shadow: 0 0 0 14px rgba(var(--rgb-{{ config.icon_color }}), 0.0); }
+                100% { box-shadow: 0 0 0 0 rgba(var(--rgb-{{ config.icon_color }}), 0.0); }
+              }
+            .: |
+              mushroom-shape-icon {
+                --icon-size: 65px;
+                display: flex;
+                margin: -18px 0 10px -20px !important;
+                padding-right: 10px;
+              }
+              ha-card {
+                clip-path: inset(0 0 0 0 round var(--ha-card-border-radius, 12px));
+              }
+      - type: markdown
+        content: |
+          {% if is_state('media_player.xlights_fpp', 'playing') %}
+          ## 🎶 Now Playing  
+          # {{ state_attr('media_player.xlights_fpp', 'media_title') }}
+          {% else %}
+          ## ⏹️ Nothing Playing
+          {% endif %}
+      - type: custom:mini-media-player
+        entity: media_player.xlights_fpp
+        volume_stateless: true
+        source: full
+        sound_mode: full
+        artwork: cover
+        toggle_power: false
+        group: false
+        replace_mute: stop
+        info: scroll
+      - type: heading
+        heading: Pi Controllers
+        heading_style: title
+        icon: mdi:gamepad-square-outline
+      - type: tile
+        grid_options:
+          columns: 12
+          rows: 1
+        entity: switch.fpp_player
+        name: FPP Main Show Player (Leave On)
+        vertical: false
+        tap_action:
+          action: toggle
+        features_position: bottom
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.fpp_player', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - type: tile
+        entity: switch.left_pi
+        name: Left Pi Matrix Controller
+        vertical: false
+        tap_action:
+          action: toggle
+        features_position: bottom
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.left_pi', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - type: tile
+        entity: switch.right_pi
+        name: Right Pi Matrix Controller
+        vertical: false
+        tap_action:
+          action: toggle
+        features_position: bottom
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.right_pi', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        show_state: true
+        type: glance
+        entities:
+          - entity: binary_sensor.falcon_shop
+          - entity: binary_sensor.falcon_big
+          - entity: binary_sensor.falcon_door
+          - entity: binary_sensor.falcon_roof
+          - entity: binary_sensor.fpp5_main_player
+            name: FPP Main
+          - entity: binary_sensor.fpp4_left_matrix
+            name: Left Pi Matrix
+          - entity: binary_sensor.fpp5b_right_matrix
+            name: Right Pi Matrix
+        state_color: true
+      - type: tile
+        entity: switch.f48v5
+        name: Falcon_Shop
+        vertical: false
+        tap_action:
+          action: toggle
+        features_position: bottom
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.f48v5', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.f16v5_grey
+        name: Falcon_Door
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.f16v5_grey', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        show_state: false
+        entity: switch.falcon_roof_xmas
+        name: Falcon Roof
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.falcon_roof_xmas', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.falcon_big
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.falcon_big', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - type: tile
+        entity: switch.left_matrix
+        name: Left Projector (Dad)
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.left_matrix', 'on') %}
+                border: 3px solid #FFC107 !important; # NOTE: Kept your original 3px/10px style for the projectors
+                box-shadow: 0 0 10px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.matrix_right
+        name: Right Projector (Mom)
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.matrix_right', 'on') %}
+                border: 3px solid #FFC107 !important; # NOTE: Kept your original 3px/10px style for the projectors
+                box-shadow: 0 0 10px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.minoston_relay_1
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.minoston_relay_1', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.roof_power_1
+        name: Radio and Singers
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.roof_power_1', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.minoston_relay_2
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.minoston_relay_2', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.xlights_music_transmitter
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.xlights_music_transmitter', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.xlights_mega_tree_1
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.xlights_mega_tree_1', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.mega_tree_2
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.mega_tree_2', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.dual_outlet_walkway_pixel_forest_xlights
+        name: Pixel Forest
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.dual_outlet_walkway_pixel_forest_xlights', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.arches_actual
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.arches_actual', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.xlights_column_1_and_vert
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.xlights_column_1_and_vert', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.mss620_0339_outlet1
+        name: Trees and Canes
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.mss620_0339_outlet1', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.mss620_0339_outlet2
+        name: Office Front
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.mss620_0339_outlet2', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - show_name: true
+        show_icon: true
+        type: tile
+        entity: switch.snowflakes
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.snowflakes', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - type: tile
+        entity: switch.fan_matrix_left
+        name: Left Matrix Fan
+        icon: mdi:fan
+        vertical: false
+        features_position: bottom
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.fan_matrix_left', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - type: tile
+        entity: switch.matrix_right_fan
+        name: Right Matrix Fan
+        vertical: false
+        features_position: bottom
+        tap_action:
+          action: toggle
+        card_mod:
+          style: |
+            ha-card {
+              {% if is_state('switch.matrix_right_fan', 'on') %}
+                border: 2px solid #FFC107 !important;
+                box-shadow: 0 0 6px #FFC107;
+              {% else %}
+                border: none;
+                box-shadow: none;
+              {% endif %}
+            }
+      - type: custom:bar-card
+        entity: sensor.new_kiosk_timer_progress_percent
+        name: Time Remaining
+        min: 0
+        max: 100
+        direction: right
+        animation:
+          state: "on"
+          speed: 1
+        severity:
+          - from: 0
+            to: 15
+            color: "#ff3b3b"
+          - from: 15
+            to: 40
+            color: "#ffb703"
+          - from: 40
+            to: 100
+            color: "#00f5d4"
+        show_value: true
+        value_position: inside
+        height: 28px
+      - type: conditional
+        conditions:
+          - entity: binary_sensor.new_kiosk_timer_last_10_seconds
+            state: "on"
+        card:
+          type: custom:bar-card
+          entity: sensor.new_kiosk_timer_progress_percent
+          name: FINAL COUNTDOWN
+          min: 0
+          max: 100
+          direction: right
+          animation:
+            state: "on"
+            speed: 0.4
+          show_value: true
+          height: 32px
+      - type: conditional
+        conditions:
+          - entity: binary_sensor.new_kiosk_timer_finished
+            state: "on"
+        card:
+          type: markdown
+          content: |
+            ## ⏰ TIME’S UP!
