@@ -346,11 +346,11 @@ touchscreen:
           if (y >= 65 && y <= 110) {
             id(song_index) = (id(song_index) + 1) % 5;
 
-            if (id(song_index) == 0) id(song_name) = "Beautiful Mess";
-            else if (id(song_index) == 1) id(song_name) = "Push";
-            else if (id(song_index) == 2) id(song_name) = "Meet In The Middle";
-            else if (id(song_index) == 3) id(song_name) = "The Chair";
-            else if (id(song_index) == 4) id(song_name) = "Crazy Bitch";
+            if (id(song_index) == 0) id(song_name) = "Song1";
+            else if (id(song_index) == 1) id(song_name) = "Song2";
+            else if (id(song_index) == 2) id(song_name) = "Song3";
+            else if (id(song_index) == 3) id(song_name) = "Song4";
+            else if (id(song_index) == 4) id(song_name) = "Song5";
           }
 
           // Middle row: left = LED mode, right = playback target
