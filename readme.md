@@ -12,7 +12,7 @@ Custom automations, integrations, and ESPHome devices for home automation.
 
 ## Projects
 
-- [Valentines](./heart/) - LEDs and a 2.8" Display on a heart pcb.
+- [Valentines Heart](./heart/) - LEDs and a 2.8" Display on a heart pcb.
 
 ## About
 
