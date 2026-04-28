@@ -1,0 +1,48 @@
+alias: Moms Heart V2 - Play Selected Song2
+description: ""
+triggers:
+  - trigger: event
+    event_type: esphome.moms_heart_v2_play_song
+actions:
+  - action: system_log.write
+    data:
+      level: warning
+      message: >-
+        Moms Heart play request: target={{ playback_target }}, song={{ song_name
+        }}, url={{ song_url }}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ playback_target == 'Sonos' }}"
+        sequence:
+          - action: media_player.play_media
+            target:
+              entity_id: media_player.announcement
+            data:
+              enqueue: replace
+              media:
+                media_content_id: "{{ song_url }}"
+                media_content_type: music
+                metadata: {}
+    default:
+      - action: media_player.play_media
+        target:
+          entity_id: media_player.moms_heart_v2_speaker
+        data:
+          announce: true
+          media:
+            media_content_id: "{{ song_url }}"
+            media_content_type: music
+            metadata: {}
+mode: restart
+variables:
+  song_index: "{{ trigger.event.data.song_index | int(0) }}"
+  song_name: "{{ trigger.event.data.song_name | default('Unknown') }}"
+  playback_target: "{{ trigger.event.data.playback_target | default('Local') }}"
+  song_url: "{{ [
+    'http://YOUR HA SERVER:8123/local/sounds/song1.mp3',
+    'http://YOUR HA SERVER:8123/local/sounds/song2.mp3',
+    'http://YOUR HA SERVER:8123/local/sounds/song3.mp3',
+    'http://YOUR HA SERVER:8123/local/sounds/song4.mp3',
+    'http://YOUR HA SERVER:8123/local/sounds/song5.mp3'
+  ][song_index] }}"
