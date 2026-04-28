@@ -1,0 +1,11 @@
+alias: Moms Heart V2 - Stop Song
+description: ""
+triggers:
+  - event_type: esphome.moms_heart_v2_stop_song
+    trigger: event
+actions:
+  - action: media_player.media_stop
+    target:
+      entity_id:
+        - media_player.moms_heart_v2_speaker
+        - media_player.announcement
