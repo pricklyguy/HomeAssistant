@@ -1,0 +1,1161 @@
+
+
+substitutions:
+  device_name: "momsheartv2.5"
+  friendly_name: "Moms Heart V2.5"
+  board_type: "esp32-s3-devkitm-1"
+  framework_type: "esp-idf"
+  led_pin: "GPIO2"
+  led_count: "40"
+  busy_timeout_seconds: "2"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "ESP32-S3 CYD Valentine/Mothers Day Heart V2.5"
+  platformio_options:
+    board_build.arduino.memory_type: qio_opi
+    build_flags:
+      - -DBOARD_HAS_PSRAM
+      - -DARDUINO_USB_MODE=1
+      - -DARDUINO_USB_CDC_ON_BOOT=1
+  on_boot:
+    priority: -200
+    then:
+      - script.execute: apply_clock_color
+      - lvgl.label.update:
+          id: lbl_time
+          text: "..."
+      - lvgl.label.update:
+          id: lbl_ampm
+          text: ""
+      - lvgl.label.update:
+          id: lbl_date
+          text: "Waiting for time..."
+       
+
+packages:
+  common: !include common_sensors.yaml
+
+esp32:
+  board: ${board_type}
+  variant: esp32s3
+  framework:
+    type: ${framework_type}
+
+logger:
+  level: debug
+
+text_sensor:
+  - platform: template
+    name: "${friendly_name} Touch Debug"
+    id: touch_debug
+    update_interval: never  
+
+api:
+  actions:
+    - action: return_to_clock
+      then:
+        - lambda: |-
+            id(screen_mode) = 0;
+            id(ui_busy) = false;
+            id(busy_timer) = 0;
+            id(menu_timer) = 0;
+        - lvgl.page.show: page_clock   # ← only line added
+
+ota:
+  - platform: esphome
+  
+
+wifi:
+  id: wifi_id
+  networks:
+    - ssid: !secret prickly_ssid
+      password: !secret prickly_password
+      priority: 10
+
+
+  power_save_mode: none
+  on_connect:
+    then:
+      - delay: 2s
+      - script.execute: fetch_temperature
+  ap:
+    ssid: "${device_name}-fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+http_request:
+  useragent: esphome/momsheartv2.5
+  timeout: 10s
+  verify_ssl: false  
+
+psram:
+  mode: octal
+  speed: 40MHz
+  ignore_not_found: false
+
+
+
+# ---------- TIME ----------
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "America/Phoenix"
+
+
+# ---------- FONTS ----------
+font:
+  - file: "fonts/DejaVuSans.ttf"
+    id: font_big
+    size: 40
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~♥"
+
+  - file: "fonts/DejaVuSans.ttf"
+    id: font_small
+    size: 18
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~♥"
+
+  - file: "fonts/Roboto-Bold.ttf"
+    id: font_clock
+    size: 96
+    glyphs: "0123456789:- "
+
+  - file: "fonts/Roboto-Bold.ttf"
+    id: f_ampm
+    size: 24
+    glyphs: "AMP- "
+
+  - file: "fonts/Roboto-Bold.ttf"
+    id: font_temp
+    size: 28
+    bpp: 4
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:°[] -"    
+
+
+# --- Select Clock Color -----
+select:
+  - platform: template
+    name: "${friendly_name} Clock Color"
+    id: clock_color
+    optimistic: true
+    restore_value: true
+    initial_option: "Green"
+    options:
+      - "White"
+      - "Warm White"
+      - "Red"
+      - "Prickly"
+      - "Orange"
+      - "Yellow"
+      - "Green"
+      - "Cyan"
+      - "Blue"
+      - "Purple"
+    on_value:               
+      then:
+        - script.execute: apply_clock_color   
+
+# ---------- GLOBALS ----------
+globals:
+  - id: mode_index
+    type: int
+    initial_value: '0'
+
+  - id: mode_name
+    type: std::string
+    initial_value: '"Off"'
+
+  - id: screen_mode
+    type: int
+    initial_value: '0'   # 0=clock,1=menu
+
+  - id: menu_timer
+    type: int
+    initial_value: '0'
+
+  - id: song_index
+    type: int
+    initial_value: '0'
+
+  - id: song_name
+    type: std::string
+    initial_value: '"Beautiful Mess"'
+
+  - id: active_message
+    type: std::string
+    initial_value: '"I will always love you!"'
+
+  - id: ui_busy
+    type: bool
+    initial_value: 'false'
+
+  - id: busy_timer
+    type: int
+    initial_value: '0'   
+
+  - id: playback_target_index
+    type: int
+    initial_value: '0'
+
+  - id: playback_target_name
+    type: std::string
+    initial_value: '"Local"'     
+
+  - id: current_temp
+    type: int
+    initial_value: '-99'       
+
+# ---------- SPI DISPLAY ----------
+spi:
+  id: my_spi
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+
+display:
+  - platform: mipi_spi
+    id: my_display          
+    model: ILI9341
+    cs_pin: GPIO10
+    dc_pin: GPIO46
+    invert_colors: true
+    
+    update_interval: never  
+
+# ---------- TOUCH ----------
+i2c:
+  id: i2c_bus
+  sda: GPIO16
+  scl: GPIO15
+  scan: true
+
+touchscreen:
+  id: my_touchscreen        # ← add this id
+  platform: ft63x6
+  address: 0x38
+  interrupt_pin: GPIO17
+  reset_pin: GPIO18
+
+
+
+# ── SECTION 3 ─ LVGL (new block — add after touchscreen) ─────────────────────
+lvgl:
+  displays:
+    - my_display
+  rotation: 90  
+  touchscreens:
+    - my_touchscreen
+
+   
+  style_definitions:
+ 
+    - id: style_pill_dark
+      bg_color: 0x505050
+      bg_grad_color: 0x303030
+      bg_grad_dir: VER
+      radius: 22
+      border_width: 0
+      shadow_width: 0
+      text_color: 0xFFFFFF
+ 
+    - id: style_pill_green
+      bg_color: 0x007848
+      bg_grad_color: 0x00C070
+      bg_grad_dir: VER
+      radius: 22
+      border_width: 0
+      shadow_width: 0
+      text_color: 0xFFFFFF
+ 
+    - id: style_pill_red
+      bg_color: 0x7A1A1A
+      bg_grad_color: 0xBB3030
+      bg_grad_dir: VER
+      radius: 22
+      border_width: 0
+      shadow_width: 0
+      text_color: 0xFFFFFF
+ 
+  pages:
+ 
+    # ── PAGE 0 : CLOCK ────────────────────────────────────────────────────────
+    - id: page_clock
+      bg_color: 0x000000
+      widgets:
+
+        - obj:
+            width: 320
+            height: 240
+            bg_color: 0x000000
+            border_width: 0
+            pad_all: 0
+            clickable: true
+            on_click:
+              then:
+                - lambda: |-
+                    id(screen_mode) = 1;
+                    id(menu_timer) = 20;
+                - lvgl.page.show: page_menu
+            widgets:
+              - label:
+                  id: lbl_time
+                  text: "--:--"
+                  align: TOP_MID
+                  y: 25
+                  text_font: font_clock
+                  text_color: 0x00FF32   # updated live by apply_clock_color
+ 
+              - label:
+                  id: lbl_ampm
+                  text: "--"
+                  align: TOP_MID
+                  y: 137
+                  text_font: f_ampm
+                  text_color: 0x00FF32
+ 
+              - label:
+                  id: lbl_date
+                  text: "---"
+                  align: TOP_MID
+                  y: 170
+                  text_font: font_small
+                  text_color: 0x00FF32
+ 
+              - label:
+                  align: TOP_MID
+                  y: 208
+                  text: "Touch for menu"
+                  text_font: font_small
+                  text_color: 0xBABABA
+
+              - label:
+                  id: lbl_temp
+                  align: BOTTOM_RIGHT
+                  x: -15
+                  y: -34
+                  text: ""
+                  text_font: font_temp
+                  text_color: 0x044CC4                  
+ 
+    # ── PAGE 1 : MENU ─────────────────────────────────────────────────────────
+    - id: page_menu
+      bg_color: 0x000000
+      widgets:
+        - label:
+            text: "♥ Love Menu ♥"
+            align: TOP_MID
+            y: 12
+            text_font: font_big
+            text_color: 0xFF5078
+ 
+        
+        - button:
+            x: 15
+            y: 65
+            width: 290
+            height: 45
+            styles: style_pill_dark
+            widgets:
+              - label:
+                  id: lbl_song
+                  text: "Beautiful Mess"
+                  align: CENTER
+                  text_font: font_small
+            on_click:
+              then:
+                - lambda: |-
+                    id(song_index) = (id(song_index) + 1) % 5;
+                    const char* songs[] = {
+                      "Beautiful Mess", "Push", "Meet In The Middle",
+                      "The Chair", "Crazy Bitch"
+                    };
+                    id(song_name) = songs[id(song_index)];
+                    id(menu_timer) = 20;
+                - lvgl.label.update:
+                    id: lbl_song
+                    text: !lambda 'return id(song_name);'
+ 
+        
+        - button:
+            x: 15
+            y: 118
+            width: 135
+            height: 45
+            styles: style_pill_dark
+            on_click:
+              then:
+                - script.execute: next_led_mode
+                - lvgl.label.update:
+                    id: lbl_led_mode
+                    text: !lambda 'return "LED: " + id(mode_name);'
+                - lambda: 'id(menu_timer) = 20;'            
+            widgets:
+              - label:
+                  id: lbl_led_mode
+                  text: "LED: Off"
+                  align: CENTER
+                  text_font: font_small
+                  text_color: 0x34D1C6
+
+ 
+        
+        - button:
+            x: 170
+            y: 118
+            width: 135
+            height: 45
+            styles: style_pill_dark
+            on_click:
+              then:
+                - script.execute: next_playback_target
+                - lvgl.label.update:
+                    id: lbl_output
+                    text: !lambda 'return "Out: " + id(playback_target_name);'
+                - lambda: 'id(menu_timer) = 20;'
+            widgets:
+              - label:
+                  id: lbl_output
+                  text: "Out: Local"
+                  align: CENTER
+                  text_font: font_small
+                  text_color: 0xFFDC78
+
+        
+        - button:
+            x: 15
+            y: 178
+            width: 135
+            height: 45
+            styles: style_pill_green
+            widgets:
+              - label:
+                  text: "START"
+                  align: CENTER
+                  text_font: font_small
+            on_click:
+              then:
+                - script.execute: play_selected_song
+ 
+        
+        - button:
+            x: 170
+            y: 178
+            width: 135
+            height: 45
+            styles: style_pill_red
+            widgets:
+              - label:
+                  text: "STOP"
+                  align: CENTER
+                  text_font: font_small
+            on_click:
+              then:
+                - script.execute: stop_song
+ 
+    # ── PAGE 2 : NOW PLAYING ──────────────────────────────────────────────────
+    - id: page_playing
+      bg_color: 0x000000
+      widgets:
+        - label:
+            text: "♥ Now Playing ♥"
+            align: TOP_MID
+            y: 15
+            text_font: font_big
+            text_color: 0xFF5078
+ 
+        - label:
+            id: lbl_np_song
+            text: ""
+            align: TOP_MID
+            y: 72
+            text_font: font_small
+            text_color: 0xFFFFFF
+ 
+        - label:
+            text: "Playing"
+            align: TOP_MID
+            y: 110
+            text_font: font_small
+            text_color: 0x34D1C6
+ 
+        - label:
+            id: lbl_np_message
+            text: ""
+            align: TOP_MID
+            y: 148
+            text_font: font_small
+            text_color: 0xDCDCDC
+ 
+        - button:
+            x: 15
+            y: 185
+            width: 135
+            height: 42
+            styles: style_pill_green
+            widgets:
+              - label:
+                  text: "RESTART"
+                  align: CENTER
+                  text_font: font_small
+            on_click:
+              then:
+                - script.execute: play_selected_song
+ 
+        - button:
+            x: 170
+            y: 185
+            width: 135
+            height: 42
+            styles: style_pill_red
+            widgets:
+              - label:
+                  text: "STOP"
+                  align: CENTER
+                  text_font: font_small
+            on_click:
+              then:
+                - script.execute: stop_song
+ 
+    # ── PAGE 3 : LOADING ──────────────────────────────────────────────────────
+    - id: page_loading
+      bg_color: 0x000000
+      widgets:
+        - spinner:
+            align: TOP_MID
+            y: 18
+            width: 70
+            height: 70
+            spin_time: 1200ms
+            arc_length: 60deg
+            arc_color: 0xFFDC00
+            indicator:
+              arc_color: 0xFFDC00
+ 
+        - label:
+            text: "Loading..."
+            align: TOP_MID
+            y: 105
+            text_font: font_big
+            text_color: 0xFFDC00
+ 
+        - label:
+            id: lbl_loading_song
+            text: ""
+            align: TOP_MID
+            y: 162
+            text_font: font_small
+            text_color: 0xFFFFFF
+ 
+        - label:
+            text: "Starting audio"
+            align: TOP_MID
+            y: 195
+            text_font: font_small
+            text_color: 0xA0A0A0
+ 
+    # ── PAGE 4 : STOPPING ─────────────────────────────────────────────────────
+    - id: page_stopping
+      bg_color: 0x000000
+      widgets:
+        - spinner:
+            align: TOP_MID
+            y: 18
+            width: 70
+            height: 70
+            spin_time: 1200ms
+            arc_length: 60deg
+            arc_color: 0xFF7850
+            indicator:
+              arc_color: 0xFF7850
+ 
+        - label:
+            text: "Stopping..."
+            align: TOP_MID
+            y: 105
+            text_font: font_big
+            text_color: 0xFF7850
+ 
+        - label:
+            text: "Please wait"
+            align: TOP_MID
+            y: 162
+            text_font: font_small
+            text_color: 0xA0A0A0
+ 
+
+# ---------- AUDIO / ES8311 + I2S SPEAKER ----------
+audio_dac:
+  - platform: es8311
+    id: es8311_dac
+    i2c_id: i2c_bus
+    address: 0x18
+    bits_per_sample: 16bit
+    sample_rate: 16000
+    use_mclk: true
+
+i2s_audio:
+  - id: i2s_bus
+    i2s_mclk_pin: GPIO4
+    i2s_bclk_pin: GPIO5
+    i2s_lrclk_pin: GPIO7
+
+speaker:
+  - platform: i2s_audio
+    id: heart_speaker
+    i2s_audio_id: i2s_bus
+    i2s_dout_pin: GPIO8
+    dac_type: external
+    audio_dac: es8311_dac
+    channel: mono
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    buffer_duration: 500ms
+
+media_player:
+  - platform: speaker
+    id: heart_media_player
+    name: "${friendly_name} Speaker"
+    buffer_size: 600000
+    codec_support_enabled: NEEDED
+    task_stack_in_psram: false
+    announcement_pipeline:
+      speaker: heart_speaker
+      format: MP3
+      num_channels: 1
+      sample_rate: 16000
+
+    on_idle:
+      then:
+        - delay: 5s
+        - lambda: |-
+            if (id(screen_mode) == 2) {
+              id(screen_mode) = 0;
+              id(ui_busy) = false;
+              id(busy_timer) = 0;
+              id(menu_timer) = 0;
+            }
+        - light.turn_off: heart_leds   
+        - lvgl.page.show: page_clock  
+
+
+switch:
+  - platform: gpio
+    id: audio_enable
+    name: "${friendly_name} Audio Enable"
+    pin:
+      number: GPIO1
+      inverted: true   # ON pulls GPIO1 low
+    restore_mode: RESTORE_DEFAULT_ON
+
+# ---------- BACKLIGHT ----------
+output:
+  - platform: ledc
+    pin: GPIO45
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: "${friendly_name} Backlight"
+    restore_mode: ALWAYS_ON
+
+# ---------- HEART LEDs ----------
+  - platform: esp32_rmt_led_strip
+    id: heart_leds
+    name: "${friendly_name} LEDs"
+    pin: ${led_pin}
+    num_leds: ${led_count}
+    rgb_order: RGB
+    chipset: ws2812
+    restore_mode: ALWAYS_OFF
+    effects:
+
+      # ─── Real lub-dub heartbeat ──────────────────────────
+      - addressable_lambda:
+          name: "Heartbeat"
+          update_interval: 16ms
+          lambda: |-
+            static uint32_t start = millis();
+            uint32_t t = (millis() - start) % 870;
+
+            float level = 0.0f;
+
+            if (t < 40) {
+              // Lub — sharp rise
+              level = (float)t / 40.0f;
+            } else if (t < 90) {
+              // Lub — partial drop to 0.4
+              level = 1.0f - ((float)(t - 40) / 50.0f) * 0.6f;
+            } else if (t < 130) {
+              // Dub — rise to 0.75 (softer than lub)
+              level = 0.4f + ((float)(t - 90) / 40.0f) * 0.35f;
+            } else if (t < 220) {
+              // Dub — decay down
+              level = 0.75f * (1.0f - (float)(t - 130) / 90.0f);
+            } else {
+              // Long pause — dark
+              level = 0.0f;
+            }
+
+            // Rose/warm pink
+            uint8_t r = (uint8_t)(level * 255);
+            uint8_t g = (uint8_t)(level * 40);
+            uint8_t b = (uint8_t)(level * 80);
+
+            for (int i = 0; i < it.size(); i++) {
+              it[i] = Color(r, g, b);
+            }
+
+
+
+      - addressable_lambda:
+          name: "Push"
+          update_interval: 20ms
+          lambda: |-
+            static uint32_t start    = millis();
+            static float    flare[40] = {};   // per-LED flare intensity
+            static uint32_t last_flare = 0;
+
+            uint32_t now = millis();
+            float t = (float)(now - start) / 1000.0f;
+
+            // Slow brooding base breath — 3.5s cycle
+            float base = 0.12f + 0.10f * sinf(t * 2.0f * 3.14159f / 3.5f);
+
+            // Random flare trigger ~every 600ms on a random LED
+            if (now - last_flare > 600) {
+              last_flare = now;
+              int target = random_uint32() % it.size();
+              flare[target] = 1.0f;
+            }
+
+            for (int i = 0; i < it.size(); i++) {
+              // Decay each flare
+              if (flare[i] > 0.0f) flare[i] -= 0.04f;
+              if (flare[i] < 0.0f) flare[i] = 0.0f;
+
+              float f = flare[i];
+              float b_level = base + f * 0.6f;
+
+              // Base: deep purple. Flare: blood red bleeds in
+              uint8_t r = (uint8_t)(min(1.0f, base * 0.5f + f * 0.9f) * 255);
+              uint8_t g = (uint8_t)(base * 0.05f * 255);
+              uint8_t b = (uint8_t)(min(1.0f, base * 1.2f - f * 0.4f) * 220);
+
+              it[i] = Color(r, g, b);
+            }
+
+
+
+      - addressable_lambda:
+          name: "Meet In The Middle"
+          update_interval: 20ms
+          lambda: |-
+            static uint32_t start = millis();
+            float t = (float)(millis() - start) / 1000.0f;
+
+            for (int i = 0; i < it.size(); i++) {
+              float pos  = (float)i / (float)it.size();
+
+              // Two slow waves offset by position — 8s and 11s cycles
+              float wave1 = 0.5f + 0.5f * sinf(t / 8.0f  * 2.0f * 3.14159f + pos * 2.5f);
+              float wave2 = 0.5f + 0.5f * sinf(t / 11.0f * 2.0f * 3.14159f - pos * 1.8f);
+              float level = (wave1 * 0.6f + wave2 * 0.4f);
+
+              // Amber → gold → soft orange blend based on level
+              uint8_t r = (uint8_t)(level * 255);
+              uint8_t g = (uint8_t)(level * (140.0f + wave1 * 60.0f));
+              uint8_t b = (uint8_t)(level * 15);
+
+              it[i] = Color(r, g, b);
+            }
+
+
+
+      - addressable_lambda:
+          name: "Candlelight"
+          update_interval: 30ms
+          lambda: |-
+            static uint32_t start = millis();
+            static float    offset[40] = {};
+            static bool     initialized = false;
+
+            if (!initialized) {
+              for (int i = 0; i < 40; i++) {
+                offset[i] = (float)(random_uint32() % 1000) / 1000.0f * 6.28f;
+              }
+              initialized = true;
+            }
+
+            float t = (float)(millis() - start) / 1000.0f;
+
+            for (int i = 0; i < it.size(); i++) {
+              // Each LED gets its own flicker via offset phase
+              float flicker = 0.55f
+                + 0.20f * sinf(t * 7.3f  + offset[i])
+                + 0.15f * sinf(t * 13.7f + offset[i] * 1.3f)
+                + 0.10f * sinf(t * 3.1f  + offset[i] * 0.7f);
+
+              flicker = max(0.3f, min(1.0f, flicker));
+
+              // Deep red → ember orange
+              uint8_t r = (uint8_t)(flicker * 255);
+              uint8_t g = (uint8_t)(flicker * flicker * 80);   // non-linear → more orange at high
+              uint8_t b = 0;
+
+              it[i] = Color(r, g, b);
+            }
+
+
+
+      - addressable_lambda:
+          name: "Crazy Bitch"
+          update_interval: 40ms
+          lambda: |-
+            static float intensity[40] = {};
+            static uint8_t hue[40]     = {};
+
+            // Each frame: randomly ignite 3-6 LEDs to full brightness
+            int new_hits = 3 + (random_uint32() % 4);
+            for (int h = 0; h < new_hits; h++) {
+              int idx = random_uint32() % it.size();
+              intensity[idx] = 1.0f;
+              hue[idx] = random_uint32() % 256;
+            }
+
+            for (int i = 0; i < it.size(); i++) {
+              if (intensity[i] > 0.0f) {
+                // Hue to RGB (full saturation)
+                uint8_t h6  = hue[i] / 43;
+                uint8_t rem = (hue[i] - h6 * 43) * 6;
+                uint8_t p   = 0;
+                uint8_t q   = (uint8_t)(255 * (255 - rem) / 255);
+                uint8_t tv  = (uint8_t)(255 * rem / 255);
+
+                uint8_t r, g, b;
+                switch (h6) {
+                  case 0: r=255; g=tv;  b=p;   break;
+                  case 1: r=q;   g=255; b=p;   break;
+                  case 2: r=p;   g=255; b=tv;  break;
+                  case 3: r=p;   g=q;   b=255; break;
+                  case 4: r=tv;  g=p;   b=255; break;
+                  default:r=255; g=p;   b=q;   break;
+                }
+
+                float lvl = intensity[i];
+                it[i] = Color(
+                  (uint8_t)(r * lvl),
+                  (uint8_t)(g * lvl),
+                  (uint8_t)(b * lvl)
+                );
+
+                // Fast decay — LEDs die quickly so new ones pop
+                intensity[i] -= 0.25f;
+                if (intensity[i] < 0.0f) intensity[i] = 0.0f;
+
+              } else {
+                it[i] = Color(0, 0, 0);
+              }
+            }
+
+
+
+# ---------- MODE SWITCH ----------
+script:
+  - id: next_led_mode
+    then:
+      - lambda: |-
+          id(mode_index) = (id(mode_index) + 1) % 6;
+
+      - if:
+          condition:
+            lambda: 'return id(mode_index) == 0;'
+          then:
+            - light.turn_off: heart_leds
+            - lambda: 'id(mode_name) = "Off";'
+
+      - if:
+          condition:
+            lambda: 'return id(mode_index) == 1;'
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 50%
+                effect: "Heartbeat"
+            - lambda: 'id(mode_name) = "Heartbeat";'
+
+      - if:
+          condition:
+            lambda: 'return id(mode_index) == 2;'
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 70%
+                effect: "Push"
+            - lambda: 'id(mode_name) = "Push";'
+
+      - if:
+          condition:
+            lambda: 'return id(mode_index) == 3;'
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 60%
+                effect: "Meet In The Middle"
+            - lambda: 'id(mode_name) = "Meet In The Middle";'
+
+      - if:
+          condition:
+            lambda: 'return id(mode_index) == 4;'
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 55%
+                effect: "Candlelight"
+            - lambda: 'id(mode_name) = "Candlelight";'
+
+      - if:
+          condition:
+            lambda: 'return id(mode_index) == 5;'
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 100%
+                effect: "Crazy Bitch"
+            - lambda: 'id(mode_name) = "Crazy Bitch";'
+
+  - id: next_playback_target
+    then:
+      - lambda: |-
+          id(playback_target_index) = (id(playback_target_index) + 1) % 2;
+
+          if (id(playback_target_index) == 0) {
+            id(playback_target_name) = "Local";
+          } else {
+            id(playback_target_name) = "Sonos";
+          }          
+
+
+
+  - id: play_selected_song
+    mode: restart
+    then:
+      - lambda: |-
+          id(screen_mode) = 3;
+          id(ui_busy) = true;
+          id(busy_timer) = ${busy_timeout_seconds};
+          id(menu_timer) = 0;
+          const char* messages[] = {
+            "I will always love you!",
+            "You are my favorite person.",
+            "Forever and always.",
+            "You make every day better.",
+            "You are my beautiful mess."
+          };
+          id(active_message) = messages[random_uint32() % 5];
+ 
+      # Song-matched LED effects
+      - if:
+          condition:
+            lambda: 'return id(song_index) == 0;'   
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 50%
+                effect: "Heartbeat"
+ 
+      - if:
+          condition:
+            lambda: 'return id(song_index) == 1;'   
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 70%
+                effect: "Push"
+ 
+      - if:
+          condition:
+            lambda: 'return id(song_index) == 2;'   
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 60%
+                effect: "Meet In The Middle"
+ 
+      - if:
+          condition:
+            lambda: 'return id(song_index) == 3;'   
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 55%
+                effect: "Candlelight"
+ 
+      - if:
+          condition:
+            lambda: 'return id(song_index) == 4;' 
+          then:
+            - light.turn_on:
+                id: heart_leds
+                brightness: 100%
+                effect: "Crazy Bitch"
+ 
+      - lvgl.label.update:
+          id: lbl_loading_song
+          text: !lambda 'return id(song_name);'
+      - lvgl.page.show: page_loading
+ 
+      - homeassistant.event:
+          event: esphome.moms_heart_v2_play_song
+          data:
+            song_index: !lambda 'return id(song_index);'
+            song_name: !lambda 'return id(song_name);'
+            playback_target: !lambda 'return id(playback_target_name);'
+            playback_target_index: !lambda 'return id(playback_target_index);'
+ 
+ 
+  - id: stop_song
+    mode: restart
+    then:
+      - lambda: |-
+          id(screen_mode) = 4;
+          id(ui_busy) = true;
+          id(busy_timer) = ${busy_timeout_seconds};
+          id(mode_index) = 0;
+          id(mode_name) = "Off";
+      - light.turn_off: heart_leds           
+      - lvgl.page.show: page_stopping
+      - homeassistant.event:
+          event: esphome.moms_heart_v2_stop_song
+          data:
+            playback_target_index: !lambda 'return id(playback_target_index);'
+            playback_target: !lambda 'return id(playback_target_name);'
+ 
+  - id: apply_clock_color   
+    then:
+      - lambda: |-
+          auto cc = id(clock_color).current_option();
+          lv_color_t c;
+          if      (cc == "White")      c = lv_color_make(242, 250, 250);
+          else if (cc == "Warm White") c = lv_color_make(255, 220, 150);
+          else if (cc == "Red")        c = lv_color_make(255,   0,   0);
+          else if (cc == "Prickly")    c = lv_color_make( 52, 209, 198);
+          else if (cc == "Orange")     c = lv_color_make(255, 100,   0);
+          else if (cc == "Yellow")     c = lv_color_make(255, 220,   0);
+          else if (cc == "Green")      c = lv_color_make(  0, 255,  50);
+          else if (cc == "Cyan")       c = lv_color_make(  0, 220, 255);
+          else if (cc == "Blue")       c = lv_color_make( 50, 100, 255);
+          else                         c = lv_color_make(180,   0, 255);
+          lv_obj_set_style_text_color(id(lbl_time), c, 0);
+          lv_obj_set_style_text_color(id(lbl_ampm), c, 0);
+          lv_obj_set_style_text_color(id(lbl_date), c, 0);
+
+  - id: fetch_temperature
+    then:
+
+      - lambda: |-
+          ESP_LOGI("weather", "Fetching temperature...");
+      
+      - http_request.get:
+          url: "http://api.open-meteo.com/v1/forecast?latitude=33.8607&longitude=-112.5359&current=temperature_2m&temperature_unit=fahrenheit&timezone=America%2FPhoenix"
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code != 200) {
+                    ESP_LOGW("weather", "Bad response: %d", response->status_code);
+                    return;
+                  }
+                  // body is already injected by capture_response: true
+                  auto pos = body.rfind("temperature_2m\":");
+                  if (pos == std::string::npos) {
+                    ESP_LOGW("weather", "Temp key not found in: %s", body.c_str());
+                    return;
+                  }
+                  float temp = std::stof(body.substr(pos + 16));
+                  id(current_temp) = (int)roundf(temp);
+
+                  char tbuf[10];
+                  snprintf(tbuf, sizeof(tbuf), "%d\xc2\xb0""F", id(current_temp));
+                  lv_label_set_text(id(lbl_temp), tbuf);
+
+                  lv_color_t c;
+                  if      (temp <= 40) c = lv_color_hex(0x4499FF);
+                  else if (temp <= 80) c = lv_color_hex(0x44CC44);
+                  else if (temp <= 95) c = lv_color_hex(0xFFDD00);
+                  else                 c = lv_color_hex(0xFF3300);
+                  lv_obj_set_style_text_color(id(lbl_temp), c, 0);
+                  ESP_LOGI("weather", "Temp: %d°F", id(current_temp)); 
+ 
+# ---------- MENU TIMEOUT ----------
+interval:
+  - interval: 1s
+    then:
+    
+      - lambda: |-
+          if (id(busy_timer) > 0) {
+            id(busy_timer)--;
+            if (id(busy_timer) <= 0) {
+              id(ui_busy) = false;
+              if      (id(screen_mode) == 3) id(screen_mode) = 2;
+              else if (id(screen_mode) == 4) id(screen_mode) = 0;
+            }
+          }
+          if (!id(ui_busy) && id(screen_mode) == 1) {
+            if (id(menu_timer) > 0) id(menu_timer)--;
+            else id(screen_mode) = 0;
+          }
+ 
+      
+      - if:
+          condition: {lambda: 'return id(screen_mode) == 0;'}
+          then: {lvgl.page.show: page_clock}
+      - if:
+          condition: {lambda: 'return id(screen_mode) == 2;'}
+          then:
+            - lvgl.label.update:
+                id: lbl_np_song
+                text: !lambda 'return id(song_name);'
+            - lvgl.label.update:
+                id: lbl_np_message
+                text: !lambda 'return id(active_message);'
+            - lvgl.page.show: page_playing
+ 
+      
+      - lvgl.label.update:
+          id: lbl_time
+          text: !lambda |-
+            auto now = id(sntp_time).now();
+            if (!now.is_valid()) return std::string("--:--");
+            int h = now.hour % 12;
+            if (h == 0) h = 12;
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%d:%02d", h, now.minute);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_ampm
+          text: !lambda |-
+            auto now = id(sntp_time).now();
+            if (!now.is_valid()) return std::string("--");
+            return std::string(now.hour < 12 ? "AM" : "PM");
+      - lvgl.label.update:
+          id: lbl_date
+          text: !lambda |-
+            auto now = id(sntp_time).now();
+            if (!now.is_valid()) return std::string("No WiFi / Time Sync");
+            const char* days[]   = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+            const char* months[] = {"Jan","Feb","Mar","Apr","May","Jun",
+                                    "Jul","Aug","Sep","Oct","Nov","Dec"};
+            int dow = now.day_of_week;
+            if (dow < 0 || dow > 6) dow = 0;
+            int mon = now.month - 1;
+            if (mon < 0 || mon > 11) mon = 0;
+            char buf[24];
+            snprintf(buf, sizeof(buf), "%s, %s %d",
+                     days[dow], months[mon], now.day_of_month);
+            return std::string(buf);
+ 
+  - interval: 10min
+    then:
+      - script.execute: fetch_temperature  
